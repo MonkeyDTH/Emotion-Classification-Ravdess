@@ -15,12 +15,11 @@ class livePredictions:
     Main class of the application.
     """
 
-    def __init__(self, path, file):
+    def __init__(self, path):
         """
         Init method is used to initialize the main parameters.
         """
         self.path = path
-        self.file = file
 
     def load_model(self):
         """
@@ -29,19 +28,26 @@ class livePredictions:
         :return: summary of the model with the .summary() function.
         """
         self.loaded_model = keras.models.load_model(self.path)
-        # return self.loaded_model.summary()
+        return self.loaded_model.summary()
 
-    def makepredictions(self, out_file):
+    def makepredictions(self, audio_fname, out_file):
         """
         Method to process the files and create your features.
         """
-        data, sampling_rate = librosa.load(self.file)
+        data, sampling_rate = librosa.load(audio_fname)
         mfccs = np.mean(librosa.feature.mfcc(y=data, sr=sampling_rate, n_mfcc=40).T, axis=0)
         x = np.expand_dims(mfccs, axis=2)
         x = np.expand_dims(x, axis=0)
         predictions = self.loaded_model.predict_classes(x)
-        print("Prediction is: ", self.convertclasstoemotion(predictions))
-        out_file.write(f"prediction: {self.convertclasstoemotion(predictions)}\n")
+        result = self.convertclasstoemotion(predictions)
+
+        # log output
+        sample = plb.Path(audio_fname).stem
+        emotion = sample.split("-")[2]
+        correct = predictions[0] == int(emotion) - 1
+        print(f"[Sample Name] {sample}; [Emotion]: {emotion}; [Prediction]: {result}; [{correct}]")
+        out_file.write(f"[Sample Name] {sample}; [Emotion]: {emotion}; [Prediction]: {result}; [{correct}]\n")
+        return correct
 
     @staticmethod
     def convertclasstoemotion(pred):
@@ -72,35 +78,36 @@ class livePredictions:
 
 
 def main():
-    modality_list = ["01"]
-    vocal_channel_list = ["01"]
-    emotion_list = ["01", "02", "03", "04", "05", "06", "07", "08"]
-    emotion_intensity_list = ["01", "02"]
-    statement_list = ["01", "02"]
-    repetition_list = ["01", "02"]
-    actor_list = ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10",
-                  "11", "12", "13", "14", "15", "16", "17", "18", "19", "20",
-                  "21", "22", "23", "24"]
-
     result_fname = plb.Path("./Test_out/RAVDESS.txt")
     result_fname.parent.mkdir(parents=True, exist_ok=True)
     file = open(result_fname, 'w')
 
-    audio_dir = plb.Path("./Audio_Speech_Actors_01-24/Actor_01")
-    for emotion in emotion_list:
-        for emotion_intensity in emotion_intensity_list:
-            for statement in statement_list:
-                for repetition in repetition_list:
-                    if emotion == "01" and emotion_intensity == "02":
-                        continue
-                    sample = f"01-01-{emotion}-{emotion_intensity}-{statement}-{repetition}-01"
-                    pred = livePredictions(path='./Emotion_Voice_Detection_Model.h5',
-                                           file=str(audio_dir / f'{sample}.wav'))
-                    print(f"sample name: {sample}; true label: {emotion}; ", end='')
-                    file.write(f"sample name: {sample}; true label: {emotion}; ")
+    # initialize
+    pred = livePredictions(path='./Emotion_Voice_Detection_Model.h5')
+    pred.load_model()
 
-                    pred.load_model()
-                    pred.makepredictions(file)
+    audio_dir = plb.Path("./Audio_Speech_Actors_01-24")
+    total_num = 0
+    correct_num = 0
+    for actor in audio_dir.iterdir():
+        actor_totol = 0
+        actor_correct = 0
+        print(actor)
+        for audio_file in actor.iterdir():
+            correct = pred.makepredictions(str(audio_file), file)
+            total_num += 1
+            actor_totol += 1
+            if correct:
+                correct_num += 1
+                actor_correct += 1
+        actor_precision = actor_correct / actor_totol
+        print(f"[{actor.stem}] precision = {actor_precision * 100:.1f}%\n")
+        file.write(f"[{actor.stem}] precision = {actor_precision * 100:.1f}%\n\n")
+
+    # compute correct rate
+    precision = correct_num / total_num
+    print(f"Total precision: {precision * 100:.1f}%")
+    file.write(f"Total precision: {precision * 100:.1f}%")
 
     file.close()
 
