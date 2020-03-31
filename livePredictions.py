@@ -8,7 +8,7 @@ import librosa
 import os
 import pathlib as plb
 
-os.environ['CUDA_VISIBLE_DEVICES'] = "-1"  # set not use GPU
+# os.environ['CUDA_VISIBLE_DEVICES'] = "-1"  # set not use GPU
 
 class livePredictions:
     """
@@ -36,7 +36,7 @@ class livePredictions:
         """
         data, sampling_rate = librosa.load(audio_fname)
         mfccs = np.mean(librosa.feature.mfcc(y=data, sr=sampling_rate, n_mfcc=40).T, axis=0)
-        x = np.expand_dims(mfccs, axis=2)
+        x = np.expand_dims(mfccs, axis=1)
         x = np.expand_dims(x, axis=0)
         predictions = self.loaded_model.predict_classes(x)
         result = self.convertclasstoemotion(predictions)
